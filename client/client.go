@@ -13,27 +13,26 @@ import (
 	"time"
 )
 
-
 type OverHeader byte;
 
 const (
-	OverHeaderSubject = OverHeader('s')
-	OverHeaderFrm = OverHeader('f')
-	OverHeaderXRefFull = OverHeader('x')
-	OverHeaderDate = OverHeader('d')
-	OverHeaderMsgId = OverHeader('m')
+	OverHeaderSubject    = OverHeader('s')
+	OverHeaderFrm        = OverHeader('f')
+	OverHeaderXRefFull   = OverHeader('x')
+	OverHeaderDate       = OverHeader('d')
+	OverHeaderMsgId      = OverHeader('m')
 	OverHeaderReferences = OverHeader('r')
-	OverHeaderBytes = OverHeader('b')
-	OverHeaderLines = OverHeader('l')
+	OverHeaderBytes      = OverHeader('b')
+	OverHeaderLines      = OverHeader('l')
 )
 
 // Client is an NNTP client.
 type Client struct {
-	conn   *textproto.Conn
-	overViewFormat []OverHeader
-	capabilities []string
+	conn               *textproto.Conn
+	overViewFormat     []OverHeader
+	capabilities       []string
 	loadedCapabilities bool
-	Banner string
+	Banner             string
 }
 
 // New connects a client to an NNTP server.
@@ -297,7 +296,6 @@ var infoSetters = map[OverHeader]setter{
 func parseArticleOverview(line string, format []OverHeader) (*nntp.ArticleOverview, error) {
 	items := strings.Split(line, "\t")
 	res := &nntp.ArticleOverview{};
-
 	id, err := strconv.ParseUint(items[0], 10, 64)
 	if err != nil {
 		return nil, err
