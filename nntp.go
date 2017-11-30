@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/textproto"
+	"time"
 )
 
 // PostingStatus type for groups.
@@ -18,6 +19,7 @@ const (
 	PostingModerated    = PostingStatus('m')
 )
 
+
 func (ps PostingStatus) String() string {
 	return fmt.Sprintf("%c", ps)
 }
@@ -30,6 +32,18 @@ type Group struct {
 	High        int64
 	Low         int64
 	Posting     PostingStatus
+}
+
+type ArticleOverview struct {
+	Id uint64
+	Subject string
+	From string
+	XRef string
+	Date time.Time
+	MessageId string
+	References string
+	Bytes uint64
+	Lines uint64
 }
 
 // An Article that may appear in one or more groups.

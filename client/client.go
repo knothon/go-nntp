@@ -8,12 +8,31 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dustin/go-nntp"
+	"github.com/knothon/go-nntp"
+	"fmt"
+	"time"
+)
+
+
+type OverHeader byte;
+
+const (
+	OverHeaderSubject = OverHeader('s')
+	OverHeaderFrm = OverHeader('f')
+	OverHeaderXRefFull = OverHeader('x')
+	OverHeaderDate = OverHeader('d')
+	OverHeaderMsgId = OverHeader('m')
+	OverHeaderReferences = OverHeader('r')
+	OverHeaderBytes = OverHeader('b')
+	OverHeaderLines = OverHeader('l')
 )
 
 // Client is an NNTP client.
 type Client struct {
 	conn   *textproto.Conn
+	overViewFormat []OverHeader
+	capabilities []string
+	loadedCapabilities bool
 	Banner string
 }
 
@@ -42,6 +61,22 @@ func connect(conn *textproto.Conn) (*Client, error) {
 		conn:   conn,
 		Banner: msg,
 	}, nil
+}
+
+func (c *Client) Capatilities() ([]string, error) {
+	if !c.loadedCapabilities {
+		_, _, err := c.Command("CAPABILITIES", 101)
+		if err != nil {
+			return nil, err
+		}
+		lines, err := c.conn.ReadDotLines()
+		if err != nil {
+			return nil, err
+		}
+		c.capabilities = lines
+	}
+
+	return c.capabilities, nil
 }
 
 // Close this client.
@@ -162,6 +197,209 @@ func (c *Client) Body(specifier string) (int64, string, io.Reader, error) {
 	return c.articleish(222)
 }
 
+func (c *Client) overviewFmt() (res []OverHeader, err error) {
+	_, _, err = c.Command("LIST OVERVIEW.FMT", 215)
+	if err != nil {
+		return
+	}
+	lines, err := c.conn.ReadDotLines()
+	if err != nil {
+		return
+	}
+	res = make([]OverHeader, 0)
+	for _, line := range lines {
+		switch line {
+		case "Subject:":
+			res = append(res, OverHeaderSubject)
+			break
+		case "From:":
+			res = append(res, OverHeaderFrm)
+			break
+		case "Date:":
+			res = append(res, OverHeaderDate)
+			break
+		case "Message-ID:":
+			res = append(res, OverHeaderMsgId)
+			break
+		case "References:":
+			res = append(res, OverHeaderReferences)
+			break
+		case ":bytes":
+		case "Bytes":
+			res = append(res, OverHeaderBytes)
+			break
+		case ":lines":
+		case "Lines":
+			res = append(res, OverHeaderLines)
+			break
+		case "Xref:full":
+			res = append(res, OverHeaderXRefFull)
+			break
+		}
+	}
+	err = nil
+	return
+}
+
+func parseDate(str string) (time.Time, error) {
+	return time.Parse(time.RFC1123, str)
+}
+
+type setter = func(*nntp.ArticleOverview, string) (error)
+
+var infoSetters = map[OverHeader]setter{
+	OverHeaderSubject: func(overview *nntp.ArticleOverview, s string) error {
+		overview.Subject = s
+		return nil
+	},
+	OverHeaderFrm: func(overview *nntp.ArticleOverview, s string) error {
+		overview.From = s
+		return nil
+	},
+	OverHeaderDate: func(overview *nntp.ArticleOverview, s string) error {
+		date, err := parseDate(s)
+		if err != nil {
+			return err
+		}
+		overview.Date = date
+		return nil
+	},
+	OverHeaderMsgId: func(overview *nntp.ArticleOverview, s string) error {
+		overview.MessageId = s
+		return nil
+	},
+	OverHeaderReferences: func(overview *nntp.ArticleOverview, s string) error {
+		overview.References = s
+		return nil
+	},
+	OverHeaderLines: func(overview *nntp.ArticleOverview, s string) error {
+		lines, err := strconv.ParseUint(s, 10, 32)
+		if err != nil {
+			return err
+		}
+		overview.Lines = lines
+		return nil
+	},
+	OverHeaderXRefFull: func(overview *nntp.ArticleOverview, s string) error {
+		overview.XRef = s
+		return nil
+	},
+	OverHeaderBytes: func(overview *nntp.ArticleOverview, s string) (error) {
+		bytes, err := strconv.ParseUint(s, 10, 32)
+		if err != nil {
+			return err
+		}
+		overview.Bytes = bytes
+		return nil
+	},
+}
+
+func parseArticleOverview(line string, format []OverHeader) (*nntp.ArticleOverview, error) {
+	items := strings.Split(line, "\t")
+	res := &nntp.ArticleOverview{};
+
+	id, err := strconv.ParseUint(items[0], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	res.Id = id
+	for i := 1; i < len(items) && i-1 < len(format); i++ {
+		setter, ok := infoSetters[format[i-1]]
+		if ok {
+			err := setter(res, items[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return res, nil
+}
+
+func (c *Client) Over(start int64, end int64) ([]*nntp.ArticleOverview, error) {
+
+	if len(c.overViewFormat) == 0 {
+		fmt, err := c.overviewFmt()
+		if err != nil {
+			return nil, err
+		}
+		c.overViewFormat = fmt
+	}
+	cmd := fmt.Sprintf("OVER %v-%v", start, end)
+	_, _, err := c.Command(cmd, 224)
+	if err != nil {
+		return nil, err
+	}
+
+	var v []*nntp.ArticleOverview;
+	for {
+		var line string
+		line, err = c.conn.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
+			break
+		}
+
+		// Dot by itself marks end; otherwise cut one dot.
+		if len(line) > 0 && line[0] == '.' {
+			if len(line) == 1 {
+				break
+			}
+			line = line[1:]
+		}
+		art, err := parseArticleOverview(line, c.overViewFormat)
+		if err != nil {
+			return nil, err
+		}
+
+		v = append(v, art)
+	}
+	return v, nil
+}
+
+func (c *Client) XOver(start int64, end int64) ([]*nntp.Article, error) {
+
+	if len(c.overViewFormat) == 0 {
+		fmt, err := c.overviewFmt()
+		if err != nil {
+			return nil, err
+		}
+		c.overViewFormat = fmt
+	}
+	cmd := fmt.Sprintf("XOVER %v-%v", start, end)
+	_, _, err := c.Command(cmd, 224)
+	if err != nil {
+		return nil, err
+	}
+
+	var v []*nntp.ArticleOverview;
+	for {
+		var line string
+		line, err = c.conn.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
+			break
+		}
+
+		// Dot by itself marks end; otherwise cut one dot.
+		if len(line) > 0 && line[0] == '.' {
+			if len(line) == 1 {
+				break
+			}
+			line = line[1:]
+		}
+		art, err := parseArticleOverview(line, c.overViewFormat)
+		if err != nil {
+			return nil, err
+		}
+
+		v = append(v, art)
+	}
+	return nil, nil
+}
 func (c *Client) articleish(expected int) (int64, string, io.Reader, error) {
 	_, msg, err := c.conn.ReadCodeLine(expected)
 	if err != nil {
