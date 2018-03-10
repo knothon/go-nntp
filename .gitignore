@@ -1,6 +1,3 @@
 #*
 *~
-/examples/client/client
-/examples/couchserver/couchserver
-/examples/couchserver/groupcreator/groupcreator
-/examples/server/server
+.idea
