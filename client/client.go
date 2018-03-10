@@ -7,6 +7,7 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"crypto/tls"
 
 	"github.com/knothon/go-nntp"
 	"fmt"
@@ -43,6 +44,15 @@ func New(net, addr string) (*Client, error) {
 	}
 
 	return connect(conn)
+}
+
+// New connects a client to an NNTP server using tls
+func NewSsl(net string, add string, tlsConfig *tls.Config) (*Client, error) {
+	conn, err := tls.Dial(net, add, tlsConfig)
+	if err != nil {
+		return nil, err
+	}
+	return NewConn(conn)
 }
 
 // NewConn wraps an existing connection, for example one opened with tls.Dial
@@ -241,7 +251,16 @@ func (c *Client) overviewFmt() (res []OverHeader, err error) {
 }
 
 func parseDate(str string) (time.Time, error) {
-	return time.Parse(time.RFC1123, str)
+	t, err := time.Parse(time.RFC1123, str)
+
+	if err != nil {
+		str = strings.Replace(str, "+0000 (UTC)", "UTC", 1)
+		t, err = time.Parse(time.RFC1123, str)
+		if err != nil {
+			t, err = time.Parse(time.RFC1123Z, str)
+		}
+	}
+	return t, err
 }
 
 type setter = func(*nntp.ArticleOverview, string) (error)
@@ -276,7 +295,7 @@ var infoSetters = map[OverHeader]setter{
 		if err != nil {
 			return err
 		}
-		overview.Lines = lines
+		overview.Lines = uint32(lines)
 		return nil
 	},
 	OverHeaderXRefFull: func(overview *nntp.ArticleOverview, s string) error {
@@ -288,7 +307,7 @@ var infoSetters = map[OverHeader]setter{
 		if err != nil {
 			return err
 		}
-		overview.Bytes = bytes
+		overview.Bytes = uint32(bytes)
 		return nil
 	},
 }
@@ -356,7 +375,7 @@ func (c *Client) Over(start int64, end int64) ([]*nntp.ArticleOverview, error) {
 	return v, nil
 }
 
-func (c *Client) XOver(start int64, end int64) ([]*nntp.Article, error) {
+func (c *Client) XOver(start int64, end int64) ([]*nntp.ArticleOverview, error) {
 
 	if len(c.overViewFormat) == 0 {
 		fmt, err := c.overviewFmt()
@@ -396,7 +415,7 @@ func (c *Client) XOver(start int64, end int64) ([]*nntp.Article, error) {
 
 		v = append(v, art)
 	}
-	return nil, nil
+	return v, nil
 }
 func (c *Client) articleish(expected int) (int64, string, io.Reader, error) {
 	_, msg, err := c.conn.ReadCodeLine(expected)
