@@ -42,8 +42,8 @@ type ArticleOverview struct {
 	Date time.Time
 	MessageId string
 	References string
-	Bytes uint64
-	Lines uint64
+	Bytes uint32
+	Lines uint32
 }
 
 // An Article that may appear in one or more groups.
