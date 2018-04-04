@@ -2,19 +2,20 @@
 package nntpclient
 
 import (
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/textproto"
 	"strconv"
 	"strings"
-	"crypto/tls"
 
-	"github.com/knothon/go-nntp"
 	"fmt"
 	"time"
+
+	"github.com/knothon/go-nntp"
 )
 
-type OverHeader byte;
+type OverHeader byte
 
 const (
 	OverHeaderSubject    = OverHeader('s')
@@ -72,7 +73,7 @@ func connect(conn *textproto.Conn) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Capatilities() ([]string, error) {
+func (c *Client) Capabilities() ([]string, error) {
 	if !c.loadedCapabilities {
 		_, _, err := c.Command("CAPABILITIES", 101)
 		if err != nil {
@@ -263,7 +264,7 @@ func parseDate(str string) (time.Time, error) {
 	return t, err
 }
 
-type setter = func(*nntp.ArticleOverview, string) (error)
+type setter = func(*nntp.ArticleOverview, string) error
 
 var infoSetters = map[OverHeader]setter{
 	OverHeaderSubject: func(overview *nntp.ArticleOverview, s string) error {
@@ -302,7 +303,7 @@ var infoSetters = map[OverHeader]setter{
 		overview.XRef = s
 		return nil
 	},
-	OverHeaderBytes: func(overview *nntp.ArticleOverview, s string) (error) {
+	OverHeaderBytes: func(overview *nntp.ArticleOverview, s string) error {
 		bytes, err := strconv.ParseUint(s, 10, 32)
 		if err != nil {
 			return err
@@ -314,7 +315,7 @@ var infoSetters = map[OverHeader]setter{
 
 func parseArticleOverview(line string, format []OverHeader) (*nntp.ArticleOverview, error) {
 	items := strings.Split(line, "\t")
-	res := &nntp.ArticleOverview{};
+	res := &nntp.ArticleOverview{}
 	id, err := strconv.ParseUint(items[0], 10, 64)
 	if err != nil {
 		return nil, err
@@ -347,7 +348,7 @@ func (c *Client) Over(start int64, end int64) ([]*nntp.ArticleOverview, error) {
 		return nil, err
 	}
 
-	var v []*nntp.ArticleOverview;
+	var v []*nntp.ArticleOverview
 	for {
 		var line string
 		line, err = c.conn.ReadLine()
@@ -390,7 +391,7 @@ func (c *Client) XOver(start int64, end int64) ([]*nntp.ArticleOverview, error) 
 		return nil, err
 	}
 
-	var v []*nntp.ArticleOverview;
+	var v []*nntp.ArticleOverview
 	for {
 		var line string
 		line, err = c.conn.ReadLine()
