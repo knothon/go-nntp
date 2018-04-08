@@ -35,6 +35,7 @@ type Client struct {
 	capabilities       []string
 	loadedCapabilities bool
 	Banner             string
+	compress           bool
 }
 
 // New connects a client to an NNTP server.
@@ -256,6 +257,7 @@ func parseDate(str string) (time.Time, error) {
 
 	if err != nil {
 		str = strings.Replace(str, "+0000 (UTC)", "UTC", 1)
+		str = strings.Replace(str, "00 (UTC)", "00", 1)
 		t, err = time.Parse(time.RFC1123, str)
 		if err != nil {
 			t, err = time.Parse(time.RFC1123Z, str)
@@ -376,6 +378,69 @@ func (c *Client) Over(start int64, end int64) ([]*nntp.ArticleOverview, error) {
 	return v, nil
 }
 
+func (c *Client) EnableCompression() error {
+	_, _, err := c.Command("XFEATURE COMPRESS GZIP", 290)
+
+	if err != nil {
+		return err
+	}
+
+	c.compress = true
+	return nil
+}
+
+func (c *Client) readDotLines(f func(line string) error) error {
+	if c.compress {
+		reader, err := getCompressedReader(c.conn)
+
+		if err != nil {
+			return err
+		}
+		for {
+			line, err := reader.ReadString(byte(0x0A))
+
+			if err == io.EOF {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
+			line = strings.TrimSpace(string(line))
+			err = f(line)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		for {
+			var line string
+			line, err := c.conn.ReadLine()
+			if err != nil {
+				if err == io.EOF {
+					return io.ErrUnexpectedEOF
+				}
+				return err
+			}
+
+			// Dot by itself marks end; otherwise cut one dot.
+			if len(line) > 0 && line[0] == '.' {
+				if len(line) == 1 {
+					break
+				}
+				line = line[1:]
+			}
+
+			err = f(line)
+
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (c *Client) XOver(start int64, end int64) ([]*nntp.ArticleOverview, error) {
 
 	if len(c.overViewFormat) == 0 {
@@ -392,32 +457,25 @@ func (c *Client) XOver(start int64, end int64) ([]*nntp.ArticleOverview, error) 
 	}
 
 	var v []*nntp.ArticleOverview
-	for {
-		var line string
-		line, err = c.conn.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				err = io.ErrUnexpectedEOF
-			}
-			break
-		}
 
-		// Dot by itself marks end; otherwise cut one dot.
-		if len(line) > 0 && line[0] == '.' {
-			if len(line) == 1 {
-				break
-			}
-			line = line[1:]
-		}
+	err = c.readDotLines(func(line string) error {
 		art, err := parseArticleOverview(line, c.overViewFormat)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		v = append(v, art)
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
+
 	return v, nil
 }
+
 func (c *Client) articleish(expected int) (int64, string, io.Reader, error) {
 	_, msg, err := c.conn.ReadCodeLine(expected)
 	if err != nil {
