@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/knothon/go-nntp"
+	"github.com/araddon/dateparse"
 )
 
 type OverHeader byte
@@ -253,17 +254,7 @@ func (c *Client) overviewFmt() (res []OverHeader, err error) {
 }
 
 func parseDate(str string) (time.Time, error) {
-	t, err := time.Parse(time.RFC1123, str)
-
-	if err != nil {
-		str = strings.Replace(str, "+0000 (UTC)", "UTC", 1)
-		str = strings.Replace(str, "00 (UTC)", "00", 1)
-		t, err = time.Parse(time.RFC1123, str)
-		if err != nil {
-			t, err = time.Parse(time.RFC1123Z, str)
-		}
-	}
-	return t, err
+	return dateparse.ParseAny(str)
 }
 
 type setter = func(*nntp.ArticleOverview, string) error
