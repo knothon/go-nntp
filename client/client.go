@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/araddon/dateparse"
 	"github.com/chrisfarms/yenc"
 	"github.com/knothon/go-nntp"
 )
@@ -260,34 +261,7 @@ const (
 )
 
 func parseDate(str string) (time.Time, error) {
-	t, err := time.Parse(time.RFC1123, str)
-	if err == nil {
-		return t, err
-	}
-
-	t, err = time.Parse(SHORT_RFC1123Z, str)
-	if err == nil {
-		return t, err
-	}
-
-	str = strings.Replace(str, "+0000 (UTC)", "UTC", 1)
-	str = strings.Replace(str, "00 (UTC)", "00", 1)
-	if err == nil {
-		return t, err
-	}
-
-	t, err = time.Parse(time.RFC1123Z, str)
-	if err == nil {
-		return t, err
-	}
-
-	t, err = time.Parse(SHORT_RFC1123, str)
-	if err == nil {
-		return t, err
-	}
-
-	t, err = time.Parse(SHORT_RFC1123Z, str)
-	return t, err
+	return dateparse.ParseAny(str)
 }
 
 type setter = func(*nntp.ArticleOverview, string) error
