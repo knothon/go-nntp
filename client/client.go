@@ -254,17 +254,39 @@ func (c *Client) overviewFmt() (res []OverHeader, err error) {
 	return
 }
 
+const (
+	SHORT_RFC1123  = "Mon, 02 Jan 06 15:04:05 MST"
+	SHORT_RFC1123Z = "Mon, 02 Jan 06 15:04:05 -0700" // RFC1123 with numeric zone
+)
+
 func parseDate(str string) (time.Time, error) {
 	t, err := time.Parse(time.RFC1123, str)
-
-	if err != nil {
-		str = strings.Replace(str, "+0000 (UTC)", "UTC", 1)
-		str = strings.Replace(str, "00 (UTC)", "00", 1)
-		t, err = time.Parse(time.RFC1123, str)
-		if err != nil {
-			t, err = time.Parse(time.RFC1123Z, str)
-		}
+	if err == nil {
+		return t, err
 	}
+
+	t, err = time.Parse(SHORT_RFC1123Z, str)
+	if err == nil {
+		return t, err
+	}
+
+	str = strings.Replace(str, "+0000 (UTC)", "UTC", 1)
+	str = strings.Replace(str, "00 (UTC)", "00", 1)
+	if err == nil {
+		return t, err
+	}
+
+	t, err = time.Parse(time.RFC1123Z, str)
+	if err == nil {
+		return t, err
+	}
+
+	t, err = time.Parse(SHORT_RFC1123, str)
+	if err == nil {
+		return t, err
+	}
+
+	t, err = time.Parse(SHORT_RFC1123Z, str)
 	return t, err
 }
 
