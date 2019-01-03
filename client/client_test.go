@@ -2,23 +2,23 @@ package nntpclient
 
 import (
 	"bytes"
-	"testing"
 	"fmt"
-//	"encoding/hex"
+	"testing"
+	//	"encoding/hex"
 	"errors"
 	"strings"
 )
 
 type stubResponse struct {
-	ResponseCode int;
-	ResponseMsg string;
-	HasPayload bool;
-	Payload []string;
+	ResponseCode int
+	ResponseMsg  string
+	HasPayload   bool
+	Payload      []string
 }
 type stubReaderWriter struct {
 	receivedRequests []string
-	responses map[string]*stubResponse
-	buffer bytes.Buffer
+	responses        map[string]*stubResponse
+	buffer           bytes.Buffer
 }
 
 func NewStub(responseCode int, banner string) *stubReaderWriter {
@@ -28,16 +28,16 @@ func NewStub(responseCode int, banner string) *stubReaderWriter {
 }
 
 func (s *stubReaderWriter) PrepareDotPayloadResponseArray(command string, responseCode int, responseMsg string, payload []string) {
-	response := &stubResponse{ResponseCode:responseCode, ResponseMsg: responseMsg, HasPayload: true, Payload: payload}
+	response := &stubResponse{ResponseCode: responseCode, ResponseMsg: responseMsg, HasPayload: true, Payload: payload}
 	s.responses[command] = response
 }
 
 func (s *stubReaderWriter) PrepareDotPayloadResponse(command string, responseCode int, responseMsg string, payload ...string) {
-	response := &stubResponse{ResponseCode:responseCode, ResponseMsg: responseMsg, HasPayload: true, Payload: payload}
+	response := &stubResponse{ResponseCode: responseCode, ResponseMsg: responseMsg, HasPayload: true, Payload: payload}
 	s.responses[command] = response
 }
 func (s *stubReaderWriter) PrepareResponse(command string, responseCode int, responseMsg string) {
-	response := &stubResponse{ResponseCode:responseCode, ResponseMsg: responseMsg, HasPayload: false}
+	response := &stubResponse{ResponseCode: responseCode, ResponseMsg: responseMsg, HasPayload: false}
 	s.responses[command] = response
 }
 
@@ -51,7 +51,7 @@ func (s *stubReaderWriter) Read(p []byte) (n int, err error) {
 
 func (s *stubReaderWriter) Write(p []byte) (n int, err error) {
 	n, err = s.buffer.Write(p)
-//	fmt.Println(hex.EncodeToString(p))
+	//	fmt.Println(hex.EncodeToString(p))
 	if err != nil {
 		return
 	}
@@ -61,7 +61,7 @@ func (s *stubReaderWriter) Write(p []byte) (n int, err error) {
 		line := strings.TrimSpace(s.buffer.String())
 		s.buffer.Reset()
 		cmd := strings.Split(line, " ")[0]
-//		fmt.Println(cmd)
+		//		fmt.Println(cmd)
 		resp, exists := s.responses[cmd]
 
 		s.receivedRequests = append(s.receivedRequests, cmd)
@@ -72,7 +72,7 @@ func (s *stubReaderWriter) Write(p []byte) (n int, err error) {
 
 		s.buffer.WriteString(fmt.Sprintf("%v %v\r\n", resp.ResponseCode, resp.ResponseMsg))
 		if resp.HasPayload {
-			for _, line := range(resp.Payload) {
+			for _, line := range resp.Payload {
 				s.buffer.WriteString(line)
 				s.buffer.WriteString("\r\n")
 			}
@@ -97,7 +97,7 @@ func TestCapabilities(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cap, err := cli.Capatilities()
+	cap, err := cli.Capabilities()
 	if err != nil {
 		t.Fatal(err)
 		return
@@ -122,14 +122,14 @@ func BenchmarkXover(b *testing.B) {
 		payload = append(payload, line)
 	}
 
-	stub.PrepareDotPayloadResponse("CAPABILITIES", 101, "Capability list:","XOVER")
+	stub.PrepareDotPayloadResponse("CAPABILITIES", 101, "Capability list:", "XOVER")
 	stub.PrepareDotPayloadResponse("LIST", 215, "List Format:", "Subject:",
-"From:",
-"Date:", "Message-ID:",
-"References:",
-"Bytes:",
-"Lines:",
-"Xref:full")
+		"From:",
+		"Date:", "Message-ID:",
+		"References:",
+		"Bytes:",
+		"Lines:",
+		"Xref:full")
 	stub.PrepareDotPayloadResponseArray("XOVER", 224, "Overview:", payload)
 	cli, err := NewConn(stub)
 	if err != nil {
@@ -145,40 +145,28 @@ func BenchmarkXover(b *testing.B) {
 
 }
 
-func TestRealWorld(t *testing.T) {
-	cli, err := New("tcp", "news.usenetserver.com:119")
+func TestXzver(t *testing.T) {
+	stub := NewStub(200, "Stub")
+	stub.PrepareDotPayloadResponse("CAPABILITIES", 101, "Capability list:",
+		"XZVER")
+
+}
+
+func TestParseDate(t *testing.T) {
+	str := "Thu, 03 Jan 19 18:58:44 UTC"
+	_, err := parseDate(str)
+
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 		return
 	}
 
-	_, err = cli.Authenticate("macsonic", "tgh1234")
-	if err != nil {
-		t.Fatal(err)
-		return
-	}
+	str = "Thu, 03 Jan 2019 18:58:44 +0000 (UTC)"
+	_, err = parseDate(str)
 
-	caps, err := cli.Capatilities()
 	if err != nil {
-		t.Fatal(err)
-		return
-	}
-
-	for _, c := range (caps) {
-		fmt.Println(c)
-	}
-
-	group, err := cli.Group("alt.binaries.multimedia.anime.highspeed")
-	if err != nil {
-		t.Fatal(err)
-		return
-	}
-
-	_, err = cli.XOver(group.High - 1000, group.High)
-	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 		return
 	}
 
 }
-
