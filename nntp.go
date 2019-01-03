@@ -19,7 +19,6 @@ const (
 	PostingModerated    = PostingStatus('m')
 )
 
-
 func (ps PostingStatus) String() string {
 	return fmt.Sprintf("%c", ps)
 }
@@ -35,15 +34,15 @@ type Group struct {
 }
 
 type ArticleOverview struct {
-	Id uint64
-	Subject string
-	From string
-	XRef string
-	Date time.Time
-	MessageId string
+	Id         uint64
+	Subject    string
+	From       string
+	XRef       string
+	Date       time.Time
+	MessageId  string
 	References string
-	Bytes uint32
-	Lines uint32
+	Bytes      uint32
+	Lines      uint32
 }
 
 // An Article that may appear in one or more groups.
