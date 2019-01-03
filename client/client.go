@@ -3,6 +3,7 @@ package nntpclient
 
 import (
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/textproto"
@@ -12,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/chrisfarms/yenc"
 	"github.com/knothon/go-nntp"
 )
 
@@ -474,6 +476,30 @@ func (c *Client) XOver(start int64, end int64) ([]*nntp.ArticleOverview, error) 
 	}
 
 	return v, nil
+}
+
+func (c *Client) Xzver(start int64, end int64) ([]*nntp.ArticleOverview, error) {
+	if len(c.overViewFormat) == 0 {
+		fmt, err := c.overviewFmt()
+		if err != nil {
+			return nil, err
+		}
+		c.overViewFormat = fmt
+	}
+	cmd := fmt.Sprintf("XZVER %v-%v", start, end)
+	_, _, err := c.Command(cmd, 224)
+	if err != nil {
+		return nil, err
+	}
+
+	part, err := yenc.Decode(c.conn.R)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println(hex.Dump(part.Body))
+
+	return nil, err
 }
 
 func (c *Client) articleish(expected int) (int64, string, io.Reader, error) {
